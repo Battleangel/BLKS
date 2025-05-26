@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC Lombard Dashboard</title>
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #111;
+      color: white;
+    }
+    h1 {
+      font-size: 2rem;
+      color: #f7931a;
+      text-align: center;
+      margin: 2rem 0 1rem;
+    }
+    label {
+      color: #f3f4f6;
+    }
+    input {
+      background-color: #1f2937;
+      color: white;
+      border: 1px solid #374151;
+    }
+    button {
+      background-color: #f7931a;
+    }
+    button:hover {
+      background-color: #e08111;
+    }
+    table.dataTable {
+      background-color: #1f2937;
+      color: white;
+    }
+    table.dataTable th, table.dataTable td {
+      border-color: #374151;
+    }
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select {
+      background-color: #111827;
+      color: white;
+    }
+  </style>
+</head>
+<body class="px-4 py-6">
+  <h1>BTC Lombard Kredit Simulation</h1>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-7xl mx-auto mb-6">
+    <div><label>Initial BTC Amount:</label><input class="w-full px-2 py-1 rounded" type="number" id="initialBTC" value="1" step="0.0001"></div>
+    <div><label>Initial BTC Price ($):</label><input class="w-full px-2 py-1 rounded" type="number" id="initialPrice" value="70000" step="100"></div>
+    <div><label>Annual Withdrawal ($):</label><input class="w-full px-2 py-1 rounded" type="number" id="withdrawal" value="1400" step="100"></div>
+    <div><label>Interest Rate (%):</label><input class="w-full px-2 py-1 rounded" type="number" id="interestRate" value="6.15" step="0.01"></div>
+    <div><label>Target LTV (%):</label><input class="w-full px-2 py-1 rounded" type="number" id="targetLTV" value="20" step="0.1"></div>
+    <div><label>Liquidation LTV (%):</label><input class="w-full px-2 py-1 rounded" type="number" id="liquidationLTV" value="40" step="0.1"></div>
+    <div><label>BTC Growth per Year (%):</label><input class="w-full px-2 py-1 rounded" type="number" id="btcGrowth" value="30" step="1"></div>
+    <div><label>Years:</label><input class="w-full px-2 py-1 rounded" type="number" id="years" value="10" min="1"></div>
+  </div>
+  <div class="text-center mb-8">
+    <button onclick="runSimulation()" class="px-6 py-2 rounded text-white font-semibold">Run Simulation</button>
+  </div>
+  <div id="chart-container" class="max-w-7xl mx-auto mb-12"></div>
+  <div id="table-container" class="overflow-auto max-w-7xl mx-auto">
+    <table id="result-table" class="display w-full"></table>
+  </div>
+
+  <script>
+    function runSimulation() {
+      const initialBTC = parseFloat(document.getElementById('initialBTC').value);
+      const initialPrice = parseFloat(document.getElementById('initialPrice').value);
+      const withdrawal = parseFloat(document.getElementById('withdrawal').value);
+      const interestRate = parseFloat(document.getElementById('interestRate').value) / 100;
+      const targetLTV = parseFloat(document.getElementById('targetLTV').value) / 100;
+      const btcGrowth = parseFloat(document.getElementById('btcGrowth').value) / 100;
+      const years = parseInt(document.getElementById('years').value);
+
+      let data = [];
+      let btcHoldings = initialBTC;
+      let NewBtcHoldings = initialBTC;
+      let btcPrice = initialPrice;
+      let creditBalance = 0;
+      let reinvestBTCTotal = 0;
+
+      for (let i = 0; i < years; i++) {
+        const btcValue = btcHoldings * btcPrice;
+        const targetCredit = btcValue * targetLTV;
+        const interest = creditBalance * interestRate;
+        const requiredPayout = withdrawal + interest;
+        const newCreditAmount = targetCredit - creditBalance;
+        const fundingGap = Math.max(0, requiredPayout - newCreditAmount);
+        const btcSaleNeeded = fundingGap / btcPrice;
+        const surplus = Math.max(0, newCreditAmount - requiredPayout);
+        const reinvestBTC = surplus / btcPrice;
+
+        const btcPurchased = reinvestBTC;
+        const prevCredit = creditBalance;
+        
+        NewBtcHoldings = btcHoldings - btcSaleNeeded + btcPurchased;
+        creditBalance = targetCredit;
+        if(reinvestBTCTotal === 0) {
+            reinvestBTCTotal = reinvestBTC;
+        }
+        const reinvestRatio = creditBalance > 0 ? ((reinvestBTCTotal * btcPrice) / creditBalance) : 0;
+        reinvestBTCTotal = reinvestBTCTotal + reinvestBTC;
+
+        data.push([
+          i + 1,
+          `$${btcPrice.toFixed(2)}`,
+          `₿${btcHoldings.toFixed(6)}`,
+          `$${(btcHoldings * btcPrice).toFixed(2)}`,
+          `$${targetCredit.toFixed(2)}`,
+          `$${prevCredit.toFixed(2)}`,
+          `$${interest.toFixed(2)}`,
+          `$${requiredPayout.toFixed(2)}`,
+          `$${newCreditAmount.toFixed(2)}`,
+          `$${fundingGap.toFixed(2)}`,
+          `₿${btcSaleNeeded.toFixed(6)}`,
+          `$${surplus.toFixed(2)}`,
+          `₿${reinvestBTC.toFixed(6)}`,
+          `₿${btcPurchased.toFixed(6)}`,
+          `₿${NewBtcHoldings.toFixed(6)}`,
+          `$${creditBalance.toFixed(2)}`,
+          `${(creditBalance / (btcHoldings * btcPrice)).toFixed(2)*100}%`,
+          (creditBalance / (btcHoldings * btcPrice)) > (parseFloat(document.getElementById('liquidationLTV').value) / 100) ? "⚠️" : "OK"
+        ]);
+        btcHoldings = btcHoldings - btcSaleNeeded + btcPurchased;
+        btcPrice *= (1 + btcGrowth);
+      }
+
+       Highcharts.chart('chart-container', {
+        chart: { type: 'line', backgroundColor: '#1a202c', style: { color: '#fff' } },
+        title: { text: 'BTC Holdings & Credit Over Time', style: { color: '#f7931a' } },
+        xAxis: { categories: data.map(row => `Year ${row[0]}`), labels: { style: { color: '#fff' } } },
+        yAxis: [{ // Primary yAxis for Credit
+          title: { text: 'Credit Balance ($)', style: { color: '#fff' } },
+          labels: { style: { color: '#fff' } },
+        }, { // Secondary yAxis for BTC Holdings
+          title: { text: 'BTC Holdings (₿)', style: { color: '#f7931a' } },
+          labels: { style: { color: '#f7931a' } },
+          opposite: true,
+          max: Math.ceil(Math.max(...data.map(row => parseFloat(row[2].replace('₿','')))) * 1.1)
+        }],
+        legend: { itemStyle: { color: '#fff' } },
+        series: [
+          { name: 'BTC Holdings (in BTC)', yAxis: 1, data: data.map(row => parseFloat(row[2].replace('₿',''))), color: '#f7931a' },
+          { name: 'Credit Balance ($)', yAxis: 0, data: data.map(row => parseFloat(row[15].replace('$',''))), color: '#fff' }
+        ]
+      });
+
+      $('#result-table').DataTable({
+        destroy: true,
+        data: data,
+        columns: [
+          "Year", "BTC Price", "BTC Holdings", "BTC Value", "Target Credit",
+          "Previous Year Credit", "Interest", "Required Payout", "New Credit Amount",
+          "Funding Gap", "BTC Sale Needed", "Surplus from Kredit (in Units)",
+          "Reinvest from Surplus", "BTC Purchased", "New BTC Holdings",
+          "New Credit Balance", "LTV", "Warning"
+        ].map(title => ({ title }))
+      });
+    }
+
+    $(document).ready(function () {
+      runSimulation();
+    });
+  </script>
+</body>
+</html>
+
